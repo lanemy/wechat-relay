@@ -11,7 +11,9 @@ coverage
 Dockerfile
 docker-compose.yaml
 docs
-deploy
+deploy/*
+!deploy/docker
+!deploy/docker/entrypoint.sh
 test
 scripts
 eslint.config.js
