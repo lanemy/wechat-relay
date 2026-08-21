@@ -1,0 +1,39 @@
+# wechat-relay — Docker Compose 部署
+#
+# 重要:必须使用 network_mode: host。
+# 该服务有两层 loopback 强制(server.js 拒绝非 loopback 对端连接),
+# docker bridge NAT 会导致所有请求被 403 non_loopback_peer 拒绝。
+# host 网络下容器监听宿主机 127.0.0.1:18794,由宿主机上的
+# nginx-proxy-manager 反代对外(证书与域名由 NPM 管理)。
+#
+# 启动前:
+#   1. cp .env.example .env 并填入 WECHAT_APP_ID / WECHAT_APP_SECRET / RELAY_TOKEN
+#      (RELAY_TOKEN 需 >=43 位 base64url,例: openssl rand -base64 32 | tr '+/' '-_')
+#   2. docker compose up -d --build
+#
+# 不要在此文件中使用 ports: (与 network_mode: host 不兼容且不需要)。
+
+services:
+  wechat-relay:
+    build: .
+    image: wechat-relay:latest
+    container_name: wechat-relay
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - .env
+    environment:
+      # environment 优先级高于 env_file,即使 .env 里这几项为空也使用以下值
+      HOST: 127.0.0.1
+      PORT: 18794
+      DB_PATH: /app/data/idempotency.sqlite3
+      # 1c2G 服务器限制 Node 堆,防止极端情况下内存膨胀
+      NODE_OPTIONS: --max-old-space-size=192
+    volumes:
+      - ./data:/app/data
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

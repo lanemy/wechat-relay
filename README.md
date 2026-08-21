@@ -61,6 +61,10 @@ It documents two supported routes:
 1. **Tailscale Serve** — preferred for tailnet-only access. Do not enable Funnel.
 2. **A domain with Caddy** — for an operator-owned domain on a fixed IPv4, with TLS and a restrictive firewall.
 
+### Docker Compose
+
+A Docker Compose deployment is also available for servers that already run a host-network reverse proxy (for example, nginx-proxy-manager managing domains and certificates). See [docs/DEPLOY_DOCKER.md](docs/DEPLOY_DOCKER.md) (中文). The container binds to the host's `127.0.0.1:18794` via `network_mode: host`; TLS termination and public exposure stay with the operator's proxy.
+
 There is deliberately no one-command installer. Credential creation, network exposure, WeChat allowlisting, and service activation remain explicit operator decisions.
 
 ## Related repository
