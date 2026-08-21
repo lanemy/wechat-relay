@@ -38,7 +38,10 @@ services:
       # 1c2G 服务器限制 Node 堆,防止极端情况下内存膨胀
       NODE_OPTIONS: --max-old-space-size=192
     volumes:
-      - ./data:/app/data
+      # 宿主机数据目录(SQLite 落盘处),可在 .env 中用 DATA_DIR 覆盖,
+      # 例: DATA_DIR=/srv/wechat-relay/data (绝对路径或相对 compose 文件的路径)。
+      # 容器内路径 /app/data 固定不动,与 DB_PATH 对应,不要改。
+      - ${DATA_DIR:-./data}:/app/data
     mem_limit: 256m
     logging:
       driver: json-file

@@ -78,7 +78,8 @@ docker compose logs --tail=50
 ```
 
 容器内以非 root `node` 用户运行(entrypoint 用 gosu 降权),SQLite 数据落在
-bind mount 的 `./data/`。健康检查走公开的 `/v1/health`。
+bind mount 的 `./data/`(可在 `.env` 中用 `DATA_DIR=/path/to/dir` 换到其他宿主机目录,
+例:独立数据盘 `/srv/wechat-relay/data`)。健康检查走公开的 `/v1/health`。
 
 ## 4. 本地验证
 
