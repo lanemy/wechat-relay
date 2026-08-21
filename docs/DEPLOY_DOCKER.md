@@ -46,6 +46,29 @@ RELAY_TOKEN=<openssl 生成的随机值>
 compose 中 `HOST`/`PORT`/`DB_PATH`/`NODE_OPTIONS` 由 `environment:` 固定,
 即使 `.env` 里这几项为空也不会生效错误值。
 
+### 境内服务器加速(可选)
+
+境内访问 `deb.debian.org` / `registry.npmjs.org` / Docker Hub 可能极慢。构建期源可在
+`.env` 中覆盖(compose 会作为 build args 传入):
+
+```dotenv
+# Debian apt 源(清华 TUNA;也可用 mirrors.aliyun.com 等)
+APT_MIRROR=mirrors.tuna.tsinghua.edu.cn
+# npm 源(npmmirror)
+NPM_REGISTRY=https://registry.npmmirror.com
+```
+
+基础镜像(`node:22-slim`)拉取慢则配置 Docker daemon 的 registry mirror:
+编辑 `/etc/docker/daemon.json` 后 `systemctl restart docker`:
+
+```json
+{
+  "registry-mirrors": ["https://docker.m.daocloud.io"]
+}
+```
+
+(镜像加速地址时效性强,失效时自行更换可用的 mirror。)
+
 ## 3. 启动
 
 ```bash
