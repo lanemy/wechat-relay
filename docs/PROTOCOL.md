@@ -30,7 +30,7 @@ Authenticated readiness check. It verifies SQLite and obtains or reuses an in-me
 
 ## Compatible WeChat routes
 
-All four routes require authentication and accept only `POST`.
+All ten WeChat routes require authentication and accept only `POST`.
 
 | Relay route | Required content type | Accepted query | WeChat operation |
 | --- | --- | --- | --- |
@@ -38,8 +38,24 @@ All four routes require authentication and accept only `POST`.
 | `/wechat/media/uploadimg` | `multipart/form-data; boundary=...` | none | article body image upload |
 | `/wechat/draft/add` | `application/json` or UTF-8 charset | none | create draft |
 | `/wechat/draft/get` | `application/json` or UTF-8 charset | none | read draft |
+| `/wechat/datacube/getarticlesummary` | `application/json` or UTF-8 charset | none | per-article daily send statistics (legacy interface, single day) |
+| `/wechat/datacube/getarticletotal` | `application/json` or UTF-8 charset | none | per-article cumulative statistics (legacy interface, single send day) |
+| `/wechat/datacube/getarticleread` | `application/json` or UTF-8 charset | none | per-article daily read statistics |
+| `/wechat/datacube/getarticleshare` | `application/json` or UTF-8 charset | none | per-article daily share statistics |
+| `/wechat/datacube/getarticletotaldetail` | `application/json` or UTF-8 charset | none | per-article 30-day post-publication detail (single publish day) |
+| `/wechat/datacube/getbizsummary` | `application/json` or UTF-8 charset | none | account-level daily summary (window up to 30 days) |
 
 The relay forwards the normalized WeChat JSON response to the authenticated client. It retries once with a fresh in-memory access token only for WeChat error codes `40001`, `40014`, or `42001`.
+
+### Statistics date windows
+
+The six `/wechat/datacube/...` routes accept a JSON body of exactly `{"begin_date":"YYYY-MM-DD","end_date":"YYYY-MM-DD"}` and fail closed before forwarding unless all of the following hold:
+
+- Both values are calendar-valid `YYYY-MM-DD` strings (`2026-02-30` is rejected).
+- `begin_date` is not after `end_date`, and the window is at most one day everywhere except `/wechat/datacube/getbizsummary`, which accepts up to 30 days.
+- `end_date` is a finalized Beijing statistics day: strictly earlier than today when computed in `Asia/Shanghai`, because WeChat has no same-day data.
+
+Violations return `400` with `invalid_json_shape`, `invalid_date_format`, `date_span_not_supported`, or `date_not_finalized` respectively. These routes are read-only: they reject `Idempotency-Key`, never touch the idempotency store, and forward the WeChat response without persisting anything.
 
 ## Idempotency
 
@@ -62,7 +78,7 @@ The metadata table is capped at `IDEMPOTENCY_MAX_RECORDS` (default 10,000; confi
 
 `completed`, `forwarding`, and `outcome_unknown` rows are protected and never evicted automatically. If protected rows fill the table, new draft reservations and readiness fail with `503 idempotency_capacity_exhausted`; existing keys still return their conflict or replay-blocked decision. This bounds storage without weakening uncertain-outcome replay protection. The database uses WAL auto-checkpointing and a journal-size limit, and deleted pages are reused by SQLite.
 
-The three other routes reject `Idempotency-Key`; compatible clients send it only when creating a draft.
+Every route except `/wechat/draft/add` rejects `Idempotency-Key`; compatible clients send it only when creating a draft.
 
 ## Relay errors
 

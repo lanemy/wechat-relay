@@ -9,7 +9,9 @@
   SQLite runtime state.
 - Preserve loopback binding, exact upstream route allowlists, bounded requests,
   authenticated readiness, idempotency fail-closed behavior, redacted logs,
-  and the draft-only boundary.
+  and the boundary of draft-only writes plus read-only statistics lookups.
+- After changing any tracked file, regenerate the THREAT_MODEL.md snapshot
+  with `node scripts/threat-model-snapshot.mjs --write`.
 
 ## Development
 

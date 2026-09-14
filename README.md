@@ -1,6 +1,6 @@
 # wechat-relay
 
-`wechat-relay` is a small, public, self-hosted relay for four WeChat Official Account draft APIs. It exists for one narrow deployment problem: the Official Account allowlist sees the relay server's fixed outbound IPv4 instead of a changing client address.
+`wechat-relay` is a small, public, self-hosted relay for four WeChat Official Account draft APIs and six read-only article-statistics APIs. It exists for one narrow deployment problem: the Official Account allowlist sees the relay server's fixed outbound IPv4 instead of a changing client address.
 
 Commercial use is permitted, but users must comply with
 `AGPL-3.0-or-later`. For commercial deployment, customization, training, or
@@ -10,7 +10,7 @@ technical support, contact the repository maintainer.
 >
 > 商业部署、定制、培训与技术支持：可联系维护者。
 
-The relay creates or reads drafts only through the four documented compatibility routes. It does not automate the WeChat client, open the Official Account web console, mass-send, publish, or provide a generic WeChat API proxy.
+The relay creates or reads drafts only through the four documented compatibility routes, and pulls published-article statistics through six additional read-only datacube routes. It does not automate the WeChat client, open the Official Account web console, mass-send, publish, or provide a generic WeChat API proxy.
 
 ## Security model
 
@@ -23,6 +23,7 @@ The relay creates or reads drafts only through the four documented compatibility
 - SQLite stores only a domain-separated SHA-256 idempotency-key digest, route, SHA-256 body hash, stage, and timestamps. It never stores the caller's raw key, article text, images, response bodies, titles, or media identifiers.
 - Idempotency metadata is capped at 10,000 rows by default. Only expired `failed_safe` rows are reclaimed automatically; protected completed, forwarding, and uncertain outcomes are never evicted to make room.
 - Logs use a fixed allowlist and never include secrets, authentication headers, request/response bodies, titles, access tokens, or media identifiers.
+- The statistics routes are read-only: they reject `Idempotency-Key`, never touch SQLite, and fail closed on date windows that are not calendar-valid, exceed the route's span limit, or name a Beijing day whose data is not final.
 
 Read [SECURITY.md](SECURITY.md), [THREAT_MODEL.md](THREAT_MODEL.md), and [docs/PROTOCOL.md](docs/PROTOCOL.md) before deployment.
 

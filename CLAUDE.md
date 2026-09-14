@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`wechat-relay` is a small self-hosted relay for four WeChat Official Account draft APIs. The relay exists so the Official Account IP allowlist sees one fixed outbound IPv4 instead of changing client addresses. It is draft-only by design — no mass-send, publish, generic proxy, or WeChat client automation.
+`wechat-relay` is a small self-hosted relay for four WeChat Official Account draft APIs plus six read-only article-statistics (datacube) APIs. The relay exists so the Official Account IP allowlist sees one fixed outbound IPv4 instead of changing client addresses. Writes are draft-only by design — no mass-send, publish, generic proxy, or WeChat client automation; the statistics routes are read-only lookups with fail-closed Beijing-day date windows.
 
 ## Commands
 
@@ -29,7 +29,7 @@ These are deliberate security boundaries documented in SECURITY.md, THREAT_MODEL
 - **Node majors 20/22/24 only** — startup rejects others (enforced in `src/config.js`).
 - **Loopback-only binding** — `HOST` must be `127.0.0.1` or `::1`; the handler also rejects non-loopback socket peers. Reverse proxy (Tailscale Serve / Caddy) is the network boundary.
 - **Required env**: `WECHAT_APP_ID`, `WECHAT_APP_SECRET`, `RELAY_TOKEN` (≥32 random bytes encoded — 43+ base64url chars or 64+ hex chars). The process refuses to start without them. `.env` is intentionally NOT auto-loaded.
-- **Exact route allowlist** — only the routes in `src/routes.js` (`/v1/health`, `/v1/ready`, `/wechat/material/add_material`, `/wechat/media/uploadimg`, `/wechat/draft/add`, `/wechat/draft/get`). No generic proxying.
+- **Exact route allowlist** — only the routes in `src/routes.js` (`/v1/health`, `/v1/ready`, `/wechat/material/add_material`, `/wechat/media/uploadimg`, `/wechat/draft/add`, `/wechat/draft/get`, `/wechat/datacube/getarticlesummary`, `/wechat/datacube/getarticletotal`, `/wechat/datacube/getarticleread`, `/wechat/datacube/getarticleshare`, `/wechat/datacube/getarticletotaldetail`, `/wechat/datacube/getbizsummary`). No generic proxying. The datacube routes are read-only: `Idempotency-Key` forbidden, no SQLite writes, and date windows must be calendar-valid `YYYY-MM-DD`, within the route's span (single day everywhere except `getbizsummary`'s 30 days), with `end_date` strictly before today in `Asia/Shanghai`.
 - **Everything is bounded** — body size, body time, upstream timeouts/response size, rate limits (per-policy: authenticated/health/preauth), connections, and upstream concurrency.
 - **Idempotency fail-closed** — `/wechat/draft/add` requires `Idempotency-Key`; replays of possibly-executed requests are blocked (409), never auto-retried. SQLite stores only SHA-256 digests (domain-separated key digest, body hash), route, stage, timestamps — never raw keys, bodies, titles, or media IDs. Completed/forwarding/uncertain rows are never evicted; only expired `failed_safe` rows are reclaimed.
 - **Redacted logs** — fixed allowlist of events; never secrets, bodies, tokens, or media identifiers. `no-console` is an eslint error; use the logger.

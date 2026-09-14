@@ -2,7 +2,7 @@
 
 ## Overview
 
-This repository runs one loopback-only Node.js service that authenticates a trusted client and forwards four fixed draft-related operations to `https://api.weixin.qq.com`. Its assets are the Official Account AppID/AppSecret, relay bearer token, in-memory WeChat access token, unpublished article/media content in transit, fixed-IP allowlist privilege, and idempotency decisions that prevent duplicate drafts.
+This repository runs one loopback-only Node.js service that authenticates a trusted client and forwards four fixed draft-related operations plus six fixed read-only article-statistics operations to `https://api.weixin.qq.com`. Its assets are the Official Account AppID/AppSecret, relay bearer token, in-memory WeChat access token, unpublished article/media content and published-article statistics in transit, fixed-IP allowlist privilege, and idempotency decisions that prevent duplicate drafts.
 
 Primary runtime code is under `src/`. The systemd and reverse-proxy examples under `deploy/` define the production isolation boundary. Tests, documentation, and the local secret scanner are developer/operator surfaces and are not network services.
 
@@ -12,7 +12,7 @@ Primary runtime code is under `src/`. The systemd and reverse-proxy examples und
 
 1. **Client to network edge:** an authenticated Ailu-compatible client reaches Tailscale Serve or Caddy over HTTPS. The edge is operator-controlled; forwarded client-IP headers are not trusted by the relay.
 2. **Network edge to Node process:** the edge connects to `127.0.0.1:18794`. `src/config.js` rejects non-loopback binding and `src/server.js` rejects non-loopback peers.
-3. **Node process to WeChat:** `src/wechat-client.js` selects a fixed HTTPS origin and four fixed upstream paths. Request bodies are attacker-controlled after authentication, but the upstream host/path is not.
+3. **Node process to WeChat:** `src/wechat-client.js` selects a fixed HTTPS origin and ten fixed upstream paths. Request bodies are attacker-controlled after authentication, but the upstream host/path is not.
 4. **Node process to local state:** `src/idempotency-store.js` writes only a domain-separated idempotency-key digest plus route/body-hash/stage metadata to a mode-0600 SQLite database. Raw caller keys, credentials, bodies, images, responses, and media identifiers never cross this boundary.
 5. **Operator to runtime configuration:** the root-only systemd environment file supplies three required secrets. Repository files, logs, service status, and public health output must not reveal them.
 
@@ -41,7 +41,7 @@ An attacker may guess a bearer token, submit ambiguous authentication headers, o
 
 ### SSRF and confused-deputy abuse
 
-A stolen relay token could otherwise turn the server's allowlisted IPv4 into a generic WeChat or internet proxy. `src/routes.js` exposes only four WeChat operations. `src/wechat-client.js` constructs all URLs from one constant HTTPS origin and fixed path table, disables redirects, and allowlists the sole material query value. There is no client-supplied URL, host, scheme, or generic path.
+A stolen relay token could otherwise turn the server's allowlisted IPv4 into a generic WeChat or internet proxy. `src/routes.js` exposes only ten WeChat operations: four draft operations and six read-only `datacube` statistics lookups. The statistics routes reject `Idempotency-Key`, never touch SQLite, and fail closed on date windows that are not calendar-valid `YYYY-MM-DD` values, exceed the route's one-day or 30-day span limit, or name a Beijing day (`Asia/Shanghai`) whose data is not final; a stolen token therefore exposes only metrics about already-published articles, never drafts or credentials. `src/wechat-client.js` constructs all URLs from one constant HTTPS origin and fixed path table, disables redirects, and allowlists the sole material query value. There is no client-supplied URL, host, scheme, or generic path.
 
 ### Duplicate drafts and crash recovery
 
@@ -55,7 +55,7 @@ SQLite compromise should reveal request timing and hashes, not unpublished conte
 
 Root/VPS compromise, malicious changes to Caddy/Tailscale, DNS takeover, client-device compromise, or direct WeChat credential theft can bypass repository controls and require infrastructure/account incident response. Public publishing and mass-send attacks are out of scope because no such route exists.
 
-No generic path forwarding is implemented: the relay recognizes only the four documented compatibility routes plus its two service-status endpoints.
+No generic path forwarding is implemented: the relay recognizes only the ten documented compatibility routes plus its two service-status endpoints.
 
 ## Severity Calibration (Critical, High, Medium, Low)
 
@@ -65,5 +65,5 @@ No generic path forwarding is implemented: the relay recognizes only the four do
 - **Low:** verbose but non-sensitive version/uptime disclosure, minor error-code inconsistency, or a local developer-only validation weakness requiring an already trusted workstation.
 
 Repository: github.com/mcncarl/wechat-relay
-Snapshot digest covers every non-ignored repository file except `.git/` and `node_modules/`, ordered by path, with the following version line normalized to `Version: snapshot-pending`.
-Version: uncommitted-snapshot-sha256:21f02bc51782da31fedad3dbb1b5b90f93ac278dd6878655d3faac48987ccce5
+Snapshot digest covers every file tracked by git (`git ls-files`, which excludes `.git/`, `node_modules/`, and ignored files), ordered by path, with the following version line normalized to `Version: snapshot-pending`. For each file, `sha256(path + NUL + content)` is computed; the version digest is the SHA-256 of those per-file digests concatenated. Regenerate after any change with `node scripts/threat-model-snapshot.mjs --write`.
+Version: uncommitted-snapshot-sha256:f15ada98cf16e29043aad320e98341ff2df4f33c5527cc4705482d4c80611e40

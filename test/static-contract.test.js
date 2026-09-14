@@ -2,7 +2,10 @@
 
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { computeSnapshotDigest } from "../scripts/threat-model-snapshot.mjs";
 
 function text(path) {
   return fs.readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -21,7 +24,9 @@ test("package is private, AGPL, and limited to verified Node LTS lines", () => {
 });
 
 test("environment example contains keys but no values", () => {
-  for (const line of text(".env.example").trim().split("\n")) {
+  const lines = text(".env.example").trim().split("\n").filter((line) => line && !line.startsWith("#"));
+  assert.ok(lines.length > 0);
+  for (const line of lines) {
     assert.match(line, /^[A-Z0-9_]+=$/u);
   }
   const ignored = text(".gitignore");
@@ -67,7 +72,7 @@ test("manual deployment documents exactly the two approved edge routes", () => {
   }
 });
 
-test("protocol and threat model preserve the narrow four-route boundary", () => {
+test("protocol and threat model preserve the narrow ten-route boundary", () => {
   const protocol = text("docs/PROTOCOL.md");
   const threatModel = text("THREAT_MODEL.md");
   for (const route of [
@@ -75,12 +80,27 @@ test("protocol and threat model preserve the narrow four-route boundary", () => 
     "/wechat/media/uploadimg",
     "/wechat/draft/add",
     "/wechat/draft/get",
+    "/wechat/datacube/getarticlesummary",
+    "/wechat/datacube/getarticletotal",
+    "/wechat/datacube/getarticleread",
+    "/wechat/datacube/getarticleshare",
+    "/wechat/datacube/getarticletotaldetail",
+    "/wechat/datacube/getbizsummary",
   ]) {
     assert.ok(protocol.includes(route));
   }
+  assert.ok(protocol.includes("Asia/Shanghai"));
   assert.ok(threatModel.includes("No generic path forwarding"));
   assert.match(threatModel, /^Version: uncommitted-snapshot-sha256:[0-9a-f]{64}$/mu);
   assert.equal(/^Version: snapshot-pending$/mu.test(threatModel), false);
   assert.ok(text("SECURITY.md").includes("Access tokens never leave process memory"));
   assert.ok(text("SECURITY.md").includes("/security/advisories/new"));
+});
+
+test("threat model snapshot digest matches the tracked tree", () => {
+  const root = fileURLToPath(new URL("..", import.meta.url));
+  if (!fs.existsSync(path.join(root, ".git"))) return; // unpacked tarball: format-only check above
+  const digest = computeSnapshotDigest(root);
+  assert.match(digest, /^[0-9a-f]{64}$/u);
+  assert.ok(text("THREAT_MODEL.md").includes(`uncommitted-snapshot-sha256:${digest}`));
 });

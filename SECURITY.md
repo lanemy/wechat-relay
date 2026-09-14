@@ -18,7 +18,7 @@ Include the affected revision, route, preconditions, impact, and a minimal redac
 
 - Startup fails when any required secret is absent or the relay token is shorter than 32 bytes.
 - The Node service binds only to loopback. Network exposure belongs to an explicitly configured Tailscale Serve or Caddy boundary.
-- Only the six exact routes in [docs/PROTOCOL.md](docs/PROTOCOL.md) exist; only four proxy to fixed WeChat API paths.
+- Only the twelve exact routes in [docs/PROTOCOL.md](docs/PROTOCOL.md) exist; ten proxy to fixed WeChat API paths — four draft operations and six read-only statistics lookups whose date windows fail closed before forwarding.
 - The client cannot select a host, scheme, arbitrary path, redirect target, or arbitrary query parameter.
 - Authentication uses a constant-size digest and `crypto.timingSafeEqual`.
 - Body, header, response, total upstream-operation time (including token refresh/retry), rate, and concurrency bounds fail closed; rejected unread bodies close their connection. Anonymous abuse and authenticated operations use separate rate buckets so an outsider cannot consume the trusted client's quota.

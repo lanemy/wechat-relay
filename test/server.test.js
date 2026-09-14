@@ -28,6 +28,10 @@ async function withService(t, overrides = {}) {
     if (parsed.pathname === "/cgi-bin/draft/get") {
       return jsonResponse({ errcode: 0, news_item: [{ title: "private-title" }] });
     }
+    if (parsed.pathname.startsWith("/datacube/")) {
+      const echoed = JSON.parse(options.body ? String(options.body) : "{}");
+      return jsonResponse({ errcode: 0, list: [{ ref_date: echoed.begin_date }] });
+    }
     throw new Error("unexpected test URL");
   });
   const service = createRelayService({
@@ -54,6 +58,24 @@ async function waitFor(predicate, timeoutMs = 1_000) {
   }
   throw new Error("Timed out waiting for test condition.");
 }
+
+// Independent Beijing-day arithmetic (fixed UTC+8 offset) so the tests do not
+// reuse the implementation's timezone logic.
+function beijingDayNumber(offsetDays = 0) {
+  return Math.floor((Date.now() + 8 * 3_600_000) / 86_400_000) + offsetDays;
+}
+
+function statDate(dayNumber) {
+  return new Date(dayNumber * 86_400_000).toISOString().slice(0, 10);
+}
+
+const DATACUBE_SINGLE_DAY_ROUTES = [
+  "/wechat/datacube/getarticlesummary",
+  "/wechat/datacube/getarticletotal",
+  "/wechat/datacube/getarticleread",
+  "/wechat/datacube/getarticleshare",
+  "/wechat/datacube/getarticletotaldetail",
+];
 
 test("health is minimal while readiness is authenticated", async (t) => {
   const fixture = await withService(t);
@@ -138,6 +160,108 @@ test("all four compatibility routes use fixed upstream paths and strict content 
   ]) {
     assert.equal(logText.includes(forbidden), false);
   }
+});
+
+test("six read-only statistics routes forward validated date windows to fixed upstream paths", async (t) => {
+  const fixture = await withService(t);
+  const yesterday = statDate(beijingDayNumber(-1));
+  const auth = authHeaders(fixture.config, { "Content-Type": "application/json" });
+  for (const route of DATACUBE_SINGLE_DAY_ROUTES) {
+    const response = await fetch(`${fixture.baseUrl}${route}`, {
+      method: "POST",
+      headers: auth,
+      body: JSON.stringify({ begin_date: yesterday, end_date: yesterday }),
+    });
+    assert.equal(response.status, 200, route);
+    assert.deepEqual(await response.json(), { errcode: 0, list: [{ ref_date: yesterday }] }, route);
+  }
+  const windowStart = statDate(beijingDayNumber(-30));
+  const ranged = await fetch(`${fixture.baseUrl}/wechat/datacube/getbizsummary`, {
+    method: "POST",
+    headers: auth,
+    body: JSON.stringify({ begin_date: windowStart, end_date: yesterday }),
+  });
+  assert.equal(ranged.status, 200);
+  assert.deepEqual(await ranged.json(), { errcode: 0, list: [{ ref_date: windowStart }] });
+
+  assert.deepEqual(
+    fixture.upstreamCalls.map((call) => call.url.pathname),
+    [
+      "/cgi-bin/token",
+      "/datacube/getarticlesummary",
+      "/datacube/getarticletotal",
+      "/datacube/getarticleread",
+      "/datacube/getarticleshare",
+      "/datacube/getarticletotaldetail",
+      "/datacube/getbizsummary",
+    ],
+  );
+  assert.equal(fixture.upstreamCalls.every((call) => call.url.origin === "https://api.weixin.qq.com"), true);
+  const logText = fixture.logs.join("");
+  for (const forbidden of [
+    fixture.config.relayToken,
+    fixture.config.appSecret,
+    "memory-only-token",
+    "Authorization",
+  ]) {
+    assert.equal(logText.includes(forbidden), false);
+  }
+});
+
+test("statistics date windows fail closed before forwarding", async (t) => {
+  const fixture = await withService(t);
+  const yesterday = statDate(beijingDayNumber(-1));
+  const today = statDate(beijingDayNumber(0));
+  const singleDay = "/wechat/datacube/getarticletotaldetail";
+  const ranged = "/wechat/datacube/getbizsummary";
+  const post = (route, body) => fetch(`${fixture.baseUrl}${route}`, {
+    method: "POST",
+    headers: authHeaders(fixture.config, { "Content-Type": "application/json" }),
+    body: JSON.stringify(body),
+  });
+  const expectRejection = async (route, body, code) => {
+    const response = await post(route, body);
+    const detail = JSON.stringify(body);
+    assert.equal(response.status, 400, detail);
+    assert.equal((await response.json()).error.code, code, detail);
+  };
+
+  await expectRejection(singleDay, { begin_date: "2026/09/12", end_date: "2026/09/12" }, "invalid_date_format");
+  await expectRejection(singleDay, { begin_date: "2026-9-12", end_date: "2026-9-12" }, "invalid_date_format");
+  await expectRejection(singleDay, { begin_date: "2026-02-30", end_date: "2026-02-30" }, "invalid_date_format");
+  await expectRejection(singleDay, { begin_date: yesterday, end_date: yesterday, msgid: "extra" }, "invalid_json_shape");
+  await expectRejection(singleDay, { begin_date: yesterday }, "invalid_json_shape");
+  await expectRejection(singleDay, { begin_date: statDate(beijingDayNumber(-2)), end_date: yesterday }, "date_span_not_supported");
+  await expectRejection(ranged, { begin_date: statDate(beijingDayNumber(-31)), end_date: yesterday }, "date_span_not_supported");
+  await expectRejection(ranged, { begin_date: yesterday, end_date: statDate(beijingDayNumber(-2)) }, "date_span_not_supported");
+  await expectRejection(singleDay, { begin_date: today, end_date: today }, "date_not_finalized");
+  await expectRejection(ranged, { begin_date: yesterday, end_date: today }, "date_not_finalized");
+
+  assert.equal(
+    fixture.upstreamCalls.some((call) => call.url.pathname.startsWith("/datacube/")),
+    false,
+  );
+});
+
+test("statistics routes reject Idempotency-Key without forwarding", async (t) => {
+  const fixture = await withService(t);
+  const response = await fetch(`${fixture.baseUrl}/wechat/datacube/getarticlesummary`, {
+    method: "POST",
+    headers: authHeaders(fixture.config, {
+      "Content-Type": "application/json",
+      "Idempotency-Key": "stats-key-0001",
+    }),
+    body: JSON.stringify({
+      begin_date: statDate(beijingDayNumber(-1)),
+      end_date: statDate(beijingDayNumber(-1)),
+    }),
+  });
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error.code, "idempotency_not_supported");
+  assert.equal(
+    fixture.upstreamCalls.some((call) => call.url.pathname.startsWith("/datacube/")),
+    false,
+  );
 });
 
 test("persistent idempotency stage blocks duplicate draft forwarding", async (t) => {

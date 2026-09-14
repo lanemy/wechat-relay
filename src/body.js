@@ -55,6 +55,64 @@ export function validateContentType(req, kind) {
   return raw;
 }
 
+const STAT_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
+const DAY_MS = 86_400_000;
+
+// Per-route statistics window limits in days. WeChat's single-day article
+// statistics interfaces require begin_date === end_date; the account summary
+// accepts windows of up to 30 days.
+const DATACUBE_SPAN_DAYS = new Map([
+  ["datacube.getarticlesummary", 1],
+  ["datacube.getarticletotal", 1],
+  ["datacube.getarticleread", 1],
+  ["datacube.getarticleshare", 1],
+  ["datacube.getarticletotaldetail", 1],
+  ["datacube.getbizsummary", 30],
+]);
+
+function parseStatDate(value) {
+  if (typeof value !== "string" || !STAT_DATE_PATTERN.test(value)) return null;
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(5, 7));
+  const day = Number(value.slice(8, 10));
+  const utc = Date.UTC(year, month - 1, day);
+  const probe = new Date(utc);
+  if (
+    probe.getUTCFullYear() !== year ||
+    probe.getUTCMonth() !== month - 1 ||
+    probe.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return Math.floor(utc / DAY_MS);
+}
+
+// WeChat aggregates statistics on Beijing calendar days, and same-day data is
+// never final. Compare against the Asia/Shanghai date instead of the host
+// timezone so a UTC container does not misjudge which day is "today".
+function beijingToday() {
+  const formatted = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" }).format(new Date());
+  return Math.floor(new Date(`${formatted}T00:00:00Z`).getTime() / DAY_MS);
+}
+
+function validateDatacubeDates(data, maxSpanDays) {
+  const keys = Object.keys(data);
+  if (keys.length !== 2 || !("begin_date" in data) || !("end_date" in data)) {
+    throw new HttpError(400, "invalid_json_shape", "Statistics requests accept only begin_date and end_date.");
+  }
+  const begin = parseStatDate(data.begin_date);
+  const end = parseStatDate(data.end_date);
+  if (begin === null || end === null) {
+    throw new HttpError(400, "invalid_date_format", "Dates must be calendar-valid YYYY-MM-DD strings.");
+  }
+  if (begin > end || end - begin + 1 > maxSpanDays) {
+    throw new HttpError(400, "date_span_not_supported", "The date window must be ordered and within this route's span limit.");
+  }
+  if (end >= beijingToday()) {
+    throw new HttpError(400, "date_not_finalized", "end_date must be a finalized Beijing statistics day (yesterday or earlier).");
+  }
+}
+
 function declaredLength(req) {
   const raw = headerValue(req, "content-length");
   if (!raw) return null;
@@ -158,6 +216,10 @@ export function validateJsonBody(routeId, body) {
     if (typeof data.media_id !== "string" || !data.media_id || data.media_id.length > 256) {
       throw new HttpError(400, "invalid_media_reference", "Draft lookup requires a valid media reference.");
     }
+  }
+  const datacubeSpanDays = DATACUBE_SPAN_DAYS.get(routeId);
+  if (datacubeSpanDays !== undefined) {
+    validateDatacubeDates(data, datacubeSpanDays);
   }
 }
 
