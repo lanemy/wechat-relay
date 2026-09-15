@@ -20,7 +20,7 @@ WECHAT_RELAY_TOKEN  # ≥32 随机字节（Base64 ≥43 字符或 Hex ≥64 字�
 
 | 接口 | 用途 | 要点 |
 |---|---|---|
-| `POST /v1/ready` | 推送前必做 | 返回 `{"ready":true}` 才继续 |
+| `GET /v1/ready` | 推送前必做 | 返回 `{"ready":true}` 才继续 |
 | `POST /wechat/material/add_material?type=image` | 上传封面永久素材 | multipart；返回 `media_id` |
 | `POST /wechat/media/uploadimg` | 上传正文图片 | multipart，≤1MB；返回 `mmbiz.qpic.cn` URL（`http://` 强制改 `https://`） |
 | `POST /wechat/draft/add` | 创建草稿 | **必须**带 `Idempotency-Key`（随机 UUID；不放标题/正文等敏感值） |
