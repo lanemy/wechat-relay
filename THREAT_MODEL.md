@@ -4,7 +4,7 @@
 
 This repository runs one loopback-only Node.js service that authenticates a trusted client and forwards four fixed draft-related operations plus six fixed read-only article-statistics operations to `https://api.weixin.qq.com`. Its assets are the Official Account AppID/AppSecret, relay bearer token, in-memory WeChat access token, unpublished article/media content and published-article statistics in transit, fixed-IP allowlist privilege, and idempotency decisions that prevent duplicate drafts.
 
-**Accounts file on disk.** Multi-account deployments replace the three environment secrets with an operator-supplied accounts file holding plaintext AppID/AppSecret/relay-token values for 1–16 accounts. Mitigations: startup rejects files with group/world permission bits or a size above 64 KiB, ignore rules keep it out of the repository, logging carries only the non-secret account id, and edits apply only after a restart (no hot reload).
+**Accounts file on disk.** Multi-account deployments replace the three environment secrets with an operator-supplied accounts file holding plaintext AppID/AppSecret/relay-token values for 1–16 accounts. Mitigations: startup rejects files with group/world permission bits or a size above 64 KiB, ignore rules keep the default `accounts.json` filename out of the repository, logging carries only the non-secret account id, and edits apply only after a restart (no hot reload).
 
 Primary runtime code is under `src/`. The systemd and reverse-proxy examples under `deploy/` define the production isolation boundary. Tests, documentation, and the local secret scanner are developer/operator surfaces and are not network services.
 
@@ -68,4 +68,4 @@ No generic path forwarding is implemented: the relay recognizes only the ten doc
 
 Repository: github.com/mcncarl/wechat-relay
 Snapshot digest covers every file tracked by git (`git ls-files`, which excludes `.git/`, `node_modules/`, and ignored files), ordered by path, with the following version line normalized to `Version: snapshot-pending`. For each file, `sha256(path + NUL + content)` is computed; the version digest is the SHA-256 of those per-file digests concatenated. Regenerate after any change with `node scripts/threat-model-snapshot.mjs --write`.
-Version: uncommitted-snapshot-sha256:6fc9cee0e9d9f7e501818c37937d41f1164abae2589349069dd256eaee3d631d
+Version: uncommitted-snapshot-sha256:b144f4b63c8ab2983b1d3deaf7d839e3d417405a775ba0ac3c2fab5ca66bb1b7

@@ -86,6 +86,39 @@ IDEMPOTENCY_FAILED_SAFE_RETENTION_MS=604800000
 
 Only expired `failed_safe` rows are reclaimed automatically. `completed`, `forwarding`, and `outcome_unknown` rows are never evicted to admit a new draft; this preserves replay protection. At capacity, readiness and new draft creation fail closed with `idempotency_capacity_exhausted`. The operator may raise the bounded limit deliberately after reviewing disk capacity, but must reconcile protected outcomes before any offline archival or database rotation.
 
+## 2A. Multi-account mode (optional)
+
+The relay can serve up to 16 WeChat Official Accounts from one process. In this mode the presented relay token both authenticates the request and selects the account it applies to; a token can never reach another account. Routes and paths are identical to the single-account mode.
+
+Create the accounts file next to the environment file at the same protection level:
+
+```bash
+sudo install -m 0600 -o root -g root /dev/null /etc/wechat-relay/accounts.json
+sudoedit /etc/wechat-relay/accounts.json
+```
+
+The file is a JSON array; every entry needs exactly `id`, `appId`, `appSecret`, and `relayToken`. Generate each relay token from at least 32 random bytes as above. Account ids are lowercase slugs, and ids, app ids, and tokens must each be unique. Startup refuses group/world permission bits, files above 64 KiB, and rosters above 16 accounts. See `accounts.example.json` at the repository root for the shape.
+
+The unit runs under a dynamic user with a read-only filesystem, so the service cannot read a root-owned `/etc` file directly. Pass the file through a systemd credential, which the service receives as a mode-0400 copy readable only by itself:
+
+```bash
+sudo install -d -m 0755 -o root -g root /etc/systemd/system/wechat-relay.service.d
+sudo tee /etc/systemd/system/wechat-relay.service.d/multi-account.conf >/dev/null <<'EOF'
+[Service]
+LoadCredential=accounts.json:/etc/wechat-relay/accounts.json
+Environment=ACCOUNTS_FILE=${CREDENTIALS_DIRECTORY}/accounts.json
+EOF
+```
+
+Then remove the three single-account values from `/etc/wechat-relay/wechat-relay.env` — the relay refuses to start when `ACCOUNTS_FILE` is combined with `WECHAT_APP_ID`, `WECHAT_APP_SECRET`, or `RELAY_TOKEN` — and restart:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart wechat-relay.service
+```
+
+Adopting multi-account mode on an existing deployment should use a fresh `DB_PATH` (or move the old SQLite file aside after reconciling uncertain drafts): single-account idempotency digests never match the account-namespaced ones and protected rows are never evicted. `/v1/ready` now sweeps every account and fails with `503 account_not_ready` naming the failing account id. Changes apply on restart only; there is no hot reload.
+
 ## 3. Install the hardened systemd unit
 
 ```bash

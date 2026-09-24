@@ -34,7 +34,7 @@ The relay supports two mutually exclusive configuration profiles:
 1. **Single account (default):** set `WECHAT_APP_ID`, `WECHAT_APP_SECRET`, and `RELAY_TOKEN`.
 2. **Multi-account:** set `ACCOUNTS_FILE` to a JSON file listing 1–16 accounts, each with exactly `id`, `appId`, `appSecret`, and `relayToken`. Combining `ACCOUNTS_FILE` with any of the three single-account variables is rejected at startup.
 
-See [accounts.example.json](accounts.example.json) for the file shape. Account ids match `^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$`; ids, app ids, and tokens must be unique; every relay token must encode at least 32 random bytes. The file must be mode 600 (no group/world bits) and at most 64 KiB, and it is gitignored.
+See [accounts.example.json](accounts.example.json) for the file shape. Account ids match `^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$`; ids, app ids, and tokens must be unique; every relay token must encode at least 32 random bytes. The file must be mode 600 (no group/world bits) and at most 64 KiB, and the default `accounts.json` filename is gitignored (exclude custom filenames yourself).
 
 The presented bearer token both authenticates the request and selects the WeChat account it applies to; a token can never reach another account. Routes and paths are identical in both modes, and `/v1/ready` sweeps every account. Changes to the accounts file apply only after a restart — there is no hot reload.
 
