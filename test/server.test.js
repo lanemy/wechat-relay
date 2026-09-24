@@ -292,7 +292,7 @@ test("persistent idempotency stage blocks duplicate draft forwarding", async (t)
   });
   assert.equal(changed.status, 409);
   assert.equal((await changed.json()).error.code, "idempotency_conflict");
-  assert.equal(fixture.service.store.get("same-draft-key").stage, "completed");
+  assert.equal(fixture.service.store.get("default", "same-draft-key").stage, "completed");
 });
 
 test("draft creation fails closed before forwarding when Idempotency-Key is absent", async (t) => {
@@ -330,7 +330,7 @@ test("idempotency capacity rejects new drafts without evicting protected outcome
   const blocked = await create("capacity-second-key", "second");
   assert.equal(blocked.status, 503);
   assert.equal((await blocked.json()).error.code, "idempotency_capacity_exhausted");
-  assert.equal(fixture.service.store.get("capacity-first-key").stage, "completed");
+  assert.equal(fixture.service.store.get("default", "capacity-first-key").stage, "completed");
   assert.equal(
     fixture.upstreamCalls.filter((call) => call.url.pathname === "/cgi-bin/draft/add").length,
     1,
@@ -347,7 +347,7 @@ test("a local completion-write failure remains blocked as outcome unknown", asyn
   const originalMark = fixture.service.store.mark.bind(fixture.service.store);
   let simulatedFailure = true;
   fixture.service.store.mark = (...args) => {
-    if (simulatedFailure && args[3] === "completed") {
+    if (simulatedFailure && args[4] === "completed") {
       simulatedFailure = false;
       throw new Error("simulated local completion failure");
     }
@@ -363,7 +363,7 @@ test("a local completion-write failure remains blocked as outcome unknown", asyn
     body: JSON.stringify({ articles: [{ title: "private-title" }] }),
   });
   assert.equal(response.status, 500);
-  assert.equal(fixture.service.store.get("completion-write-failure").stage, "outcome_unknown");
+  assert.equal(fixture.service.store.get("default", "completion-write-failure").stage, "outcome_unknown");
 });
 
 test("path, method, query, content type, and body size are bounded", async (t) => {
@@ -587,4 +587,25 @@ test("readiness sweeps every account and names the failing one", async (t) => {
   const payload = await ready.json();
   assert.equal(payload.error.code, "account_not_ready");
   assert.ok(payload.error.message.includes("'tech'"));
+});
+
+test("idempotency keys are namespaced per account", async (t) => {
+  const fixture = await withService(t, {
+    config: { profile: "accounts", accounts: MULTI_ACCOUNTS.map((account) => ({ ...account })) },
+  });
+  const body = JSON.stringify({ articles: [{ title: "private-title", content: "private-body" }] });
+  const call = (token) => fetch(`${fixture.baseUrl}/wechat/draft/add`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "Idempotency-Key": "shared-draft-key",
+    },
+    body,
+  });
+  assert.equal((await call(MULTI_ACCOUNTS[0].relayToken)).status, 200);
+  assert.equal((await call(MULTI_ACCOUNTS[1].relayToken)).status, 200);
+  const replay = await call(MULTI_ACCOUNTS[0].relayToken);
+  assert.equal(replay.status, 409);
+  assert.equal((await replay.json()).error.code, "idempotency_replay_blocked");
 });

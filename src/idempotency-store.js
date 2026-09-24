@@ -19,22 +19,33 @@ const SCHEMA = `
     WHERE stage = 'failed_safe';
 `;
 
-function idempotencyKeySha256(key) {
-  return createHash("sha256")
-    .update("wechat-relay:idempotency-key:v1\0", "utf8")
-    .update(key, "utf8")
-    .digest("hex");
+const DIGEST_DOMAIN_V1 = "wechat-relay:idempotency-key:v1\u0000";
+const DIGEST_DOMAIN_V2 = "wechat-relay:idempotency-key:v2\u0000";
+
+function idempotencyKeySha256(key, accountId, digestVersion) {
+  const hash = createHash("sha256");
+  hash.update(digestVersion === 2 ? DIGEST_DOMAIN_V2 : DIGEST_DOMAIN_V1, "utf8");
+  if (digestVersion === 2) {
+    hash.update(accountId, "utf8");
+    hash.update("\u0000", "utf8");
+  }
+  hash.update(key, "utf8");
+  return hash.digest("hex");
 }
 
 export class IdempotencyStore {
   constructor(filename, options = {}) {
     this.maxRecords = options.maxRecords ?? 10_000;
     this.failedSafeRetentionMs = options.failedSafeRetentionMs ?? 7 * 24 * 60 * 60 * 1_000;
+    this.digestVersion = options.digestVersion ?? 1;
     if (!Number.isSafeInteger(this.maxRecords) || this.maxRecords < 1) {
       throw new TypeError("maxRecords must be a positive safe integer.");
     }
     if (!Number.isSafeInteger(this.failedSafeRetentionMs) || this.failedSafeRetentionMs < 1) {
       throw new TypeError("failedSafeRetentionMs must be a positive safe integer.");
+    }
+    if (this.digestVersion !== 1 && this.digestVersion !== 2) {
+      throw new TypeError("digestVersion must be 1 or 2.");
     }
     if (filename !== ":memory:") {
       fs.mkdirSync(path.dirname(filename), { recursive: true, mode: 0o700 });
@@ -104,15 +115,19 @@ export class IdempotencyStore {
     });
   }
 
-  begin(key, route, bodyHash, now = Date.now()) {
-    return this.beginTransaction.immediate(idempotencyKeySha256(key), route, bodyHash, now);
+  begin(accountId, key, route, bodyHash, now = Date.now()) {
+    return this.beginTransaction.immediate(
+      idempotencyKeySha256(key, accountId, this.digestVersion), route, bodyHash, now,
+    );
   }
 
-  mark(key, route, bodyHash, stage, now = Date.now()) {
+  mark(accountId, key, route, bodyHash, stage, now = Date.now()) {
     if (!["completed", "failed_safe", "outcome_unknown"].includes(stage)) {
       throw new Error("Invalid idempotency stage transition.");
     }
-    const result = this.updateStage.run(stage, now, idempotencyKeySha256(key), route, bodyHash);
+    const result = this.updateStage.run(
+      stage, now, idempotencyKeySha256(key, accountId, this.digestVersion), route, bodyHash,
+    );
     if (result.changes !== 1) {
       throw new Error("Idempotency stage transition lost its reservation.");
     }
@@ -126,8 +141,8 @@ export class IdempotencyStore {
     return this.capacityTransaction.immediate(now);
   }
 
-  get(key) {
-    return this.select.get(idempotencyKeySha256(key)) ?? null;
+  get(accountId, key) {
+    return this.select.get(idempotencyKeySha256(key, accountId, this.digestVersion)) ?? null;
   }
 
   columns() {

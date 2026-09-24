@@ -204,14 +204,14 @@ export function createRequestHandler({ config, store, clients, logger }) {
         let upstreamStarted = false;
         try {
           if (idempotencyKey) {
-            const reservation = store.begin(idempotencyKey, route.id, hash);
+            const reservation = store.begin(account.id, idempotencyKey, route.id, hash);
             if (reservation.action !== "proceed") throw errorForIdempotency(reservation);
             reservationStarted = true;
           }
           upstreamStarted = true;
           const upstream = await clients.get(account.id).forward(route, body, contentType);
           if (reservationStarted) {
-            store.mark(idempotencyKey, route.id, hash, "completed");
+            store.mark(account.id, idempotencyKey, route.id, hash, "completed");
             reservationFinalized = true;
           }
           responseStatus = upstream.status >= 200 && upstream.status <= 599 ? upstream.status : 502;
@@ -221,7 +221,7 @@ export function createRequestHandler({ config, store, clients, logger }) {
             const stage = error instanceof UpstreamError
               ? (error.outcomeUnknown ? "outcome_unknown" : "failed_safe")
               : (upstreamStarted ? "outcome_unknown" : "failed_safe");
-            store.mark(idempotencyKey, route.id, hash, stage);
+            store.mark(account.id, idempotencyKey, route.id, hash, stage);
           }
           throw error;
         }
@@ -267,6 +267,7 @@ export function createRelayService({ config, fetchImpl = fetch, logStream = proc
   const store = new IdempotencyStore(config.dbPath, {
     maxRecords: config.idempotencyMaxRecords,
     failedSafeRetentionMs: config.idempotencyFailedSafeRetentionMs,
+    digestVersion: config.profile === "accounts" ? 2 : 1,
   });
   const clients = new Map(config.accounts.map((account) => [
     account.id,
