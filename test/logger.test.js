@@ -27,3 +27,12 @@ test("logger discards secrets, headers, bodies, titles, URLs, and media identifi
   assert.equal(output.includes("unpublished"), false);
   assert.equal(output.includes("private-media-id"), false);
 });
+
+test("logger allowlist passes the account slug and drops foreign fields", () => {
+  const lines = [];
+  const logger = createJsonLogger({ write: (chunk) => { lines.push(chunk); } });
+  logger.write({ event: "request.complete", account: "tech", appSecret: "synthetic-secret-main" });
+  const record = JSON.parse(lines[0]);
+  assert.equal(record.account, "tech");
+  assert.equal("appSecret" in record, false);
+});

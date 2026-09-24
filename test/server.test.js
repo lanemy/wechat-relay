@@ -150,8 +150,8 @@ test("all four compatibility routes use fixed upstream paths and strict content 
   assert.equal(fixture.upstreamCalls.every((call) => call.url.origin === "https://api.weixin.qq.com"), true);
   const logText = fixture.logs.join("");
   for (const forbidden of [
-    fixture.config.relayToken,
-    fixture.config.appSecret,
+    fixture.config.accounts[0].relayToken,
+    fixture.config.accounts[0].appSecret,
     "private-title",
     "private-body",
     "private-draft-id",
@@ -199,8 +199,8 @@ test("six read-only statistics routes forward validated date windows to fixed up
   assert.equal(fixture.upstreamCalls.every((call) => call.url.origin === "https://api.weixin.qq.com"), true);
   const logText = fixture.logs.join("");
   for (const forbidden of [
-    fixture.config.relayToken,
-    fixture.config.appSecret,
+    fixture.config.accounts[0].relayToken,
+    fixture.config.accounts[0].appSecret,
     "memory-only-token",
     "Authorization",
   ]) {
@@ -488,4 +488,103 @@ test("early authentication rejection closes an unread streamed body", async (t) 
     request.write('{"articles":[');
   });
   assert.deepEqual(result, { statusCode: 401, connection: "close" });
+});
+
+const MULTI_ACCOUNTS = [
+  {
+    id: "main",
+    appId: "synthetic-app-id-main",
+    appSecret: "synthetic-secret-main",
+    relayToken: "a".repeat(48),
+  },
+  {
+    id: "tech",
+    appId: "synthetic-app-id-tech",
+    appSecret: "synthetic-secret-tech",
+    relayToken: "b".repeat(48),
+  },
+];
+
+test("the bearer token selects the upstream account", async (t) => {
+  const fixture = await withService(t, {
+    config: { profile: "accounts", accounts: MULTI_ACCOUNTS.map((account) => ({ ...account })) },
+  });
+  const upload = await fetch(`${fixture.baseUrl}/wechat/media/uploadimg`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${MULTI_ACCOUNTS[1].relayToken}`,
+      "Content-Type": "multipart/form-data; boundary=x",
+    },
+    body: Buffer.from("--x--\r\n"),
+  });
+  assert.equal(upload.status, 200);
+  const tokenCall = fixture.upstreamCalls.find((call) => call.url.pathname === "/cgi-bin/token");
+  assert.equal(tokenCall.url.searchParams.get("appid"), "synthetic-app-id-tech");
+
+  // Per-account access-token cache: a second tech call reuses the cached
+  // token; switching to main triggers exactly one more refresh with main's appid.
+  const secondUpload = await fetch(`${fixture.baseUrl}/wechat/media/uploadimg`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${MULTI_ACCOUNTS[1].relayToken}`,
+      "Content-Type": "multipart/form-data; boundary=x",
+    },
+    body: Buffer.from("--x--\r\n"),
+  });
+  assert.equal(secondUpload.status, 200);
+  assert.equal(fixture.upstreamCalls.filter((call) => call.url.pathname === "/cgi-bin/token").length, 1);
+
+  const mainUpload = await fetch(`${fixture.baseUrl}/wechat/media/uploadimg`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${MULTI_ACCOUNTS[0].relayToken}`,
+      "Content-Type": "multipart/form-data; boundary=x",
+    },
+    body: Buffer.from("--x--\r\n"),
+  });
+  assert.equal(mainUpload.status, 200);
+  const tokenCalls = fixture.upstreamCalls.filter((call) => call.url.pathname === "/cgi-bin/token");
+  assert.equal(tokenCalls.length, 2);
+  assert.equal(tokenCalls[1].url.searchParams.get("appid"), "synthetic-app-id-main");
+
+  const unknown = await fetch(`${fixture.baseUrl}/wechat/media/uploadimg`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${"c".repeat(48)}`,
+      "Content-Type": "multipart/form-data; boundary=x",
+    },
+    body: Buffer.from("--x--\r\n"),
+  });
+  assert.equal(unknown.status, 401);
+
+  const logText = fixture.logs.join("");
+  assert.ok(logText.includes("\"account\":\"tech\""));
+  for (const account of MULTI_ACCOUNTS) {
+    assert.ok(!logText.includes(account.appSecret), "appSecret leaked into logs");
+    assert.ok(!logText.includes(account.relayToken), "relayToken leaked into logs");
+  }
+});
+
+test("readiness sweeps every account and names the failing one", async (t) => {
+  const fetchImpl = async (url) => {
+    const parsed = new URL(url);
+    if (parsed.pathname === "/cgi-bin/token") {
+      if (parsed.searchParams.get("appid") === "synthetic-app-id-tech") {
+        return jsonResponse({ errcode: 40_013, errmsg: "synthetic appid is invalid" });
+      }
+      return jsonResponse({ access_token: "memory-only-token", expires_in: 7_200 });
+    }
+    throw new Error("unexpected test URL");
+  };
+  const fixture = await withService(t, {
+    config: { profile: "accounts", accounts: MULTI_ACCOUNTS.map((account) => ({ ...account })) },
+    fetchImpl,
+  });
+  const ready = await fetch(`${fixture.baseUrl}/v1/ready`, {
+    headers: { Authorization: `Bearer ${MULTI_ACCOUNTS[0].relayToken}` },
+  });
+  assert.equal(ready.status, 503);
+  const payload = await ready.json();
+  assert.equal(payload.error.code, "account_not_ready");
+  assert.ok(payload.error.message.includes("'tech'"));
 });

@@ -6,6 +6,17 @@ import { UpstreamError } from "../src/errors.js";
 import { WechatClient } from "../src/wechat-client.js";
 import { jsonResponse, testConfig } from "./helpers.js";
 
+// Mirrors how src/server.js builds a per-account client: the shared bounds
+// plus one account's credentials.
+function clientConfig(overrides = {}) {
+  const config = testConfig(overrides);
+  return {
+    ...config,
+    appId: config.accounts[0].appId,
+    appSecret: config.accounts[0].appSecret,
+  };
+}
+
 const DRAFT_ROUTE = {
   id: "draft.add",
   upstreamPath: "/cgi-bin/draft/add",
@@ -20,7 +31,7 @@ test("client uses fixed WeChat paths and refreshes an invalid access token once"
     jsonResponse({ access_token: "second-memory-token", expires_in: 7_200 }),
     jsonResponse({ errcode: 0, media_id: "private-result" }),
   ];
-  const client = new WechatClient(testConfig(), async (url, options) => {
+  const client = new WechatClient(clientConfig(), async (url, options) => {
     calls.push({ url: new URL(url), options });
     return responses.shift();
   });
@@ -46,7 +57,7 @@ test("client uses fixed WeChat paths and refreshes an invalid access token once"
 });
 
 test("operation timeout is marked as outcome unknown", async () => {
-  const config = testConfig({ upstreamTimeoutMs: 10 });
+  const config = clientConfig({ upstreamTimeoutMs: 10 });
   let calls = 0;
   const client = new WechatClient(config, async (_url, options) => {
     calls += 1;
@@ -69,7 +80,7 @@ test("operation timeout is marked as outcome unknown", async () => {
 });
 
 test("token refresh and retry share one total upstream deadline", async () => {
-  const config = testConfig({ upstreamTimeoutMs: 30 });
+  const config = clientConfig({ upstreamTimeoutMs: 30 });
   let calls = 0;
   const client = new WechatClient(config, async (_url, options) => {
     calls += 1;
@@ -101,7 +112,7 @@ test("token refresh and retry share one total upstream deadline", async () => {
 });
 
 test("oversized upstream JSON is rejected without exposing its content", async () => {
-  const config = testConfig({ maxUpstreamResponseBytes: 32 });
+  const config = clientConfig({ maxUpstreamResponseBytes: 32 });
   const client = new WechatClient(config, async () => jsonResponse(
     { access_token: "x".repeat(100), expires_in: 7_200 },
     { headers: { "Content-Length": "200" } },

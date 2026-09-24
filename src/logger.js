@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 const ALLOWED_FIELDS = new Set([
+  "account",
   "bodyBytes",
   "durationMs",
   "errorCode",

@@ -1,15 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 export function testConfig(overrides = {}) {
-  const appId = "test-app-id";
-  const appSecret = "test-app-secret";
-  const relayToken = "r".repeat(48);
+  const { appId = "test-app-id", appSecret = "test-app-secret", relayToken = "r".repeat(48), ...rest } = overrides;
   return {
     profile: "legacy",
     accounts: [Object.freeze({ id: "default", appId, appSecret, relayToken })],
-    appId,
-    appSecret,
-    relayToken,
     host: "127.0.0.1",
     port: 0,
     dbPath: ":memory:",
@@ -26,7 +21,7 @@ export function testConfig(overrides = {}) {
     maxConnections: 64,
     idempotencyMaxRecords: 10_000,
     idempotencyFailedSafeRetentionMs: 7 * 24 * 60 * 60 * 1_000,
-    ...overrides,
+    ...rest,
   };
 }
 
@@ -39,7 +34,7 @@ export function jsonResponse(payload, init = {}) {
 
 export function authHeaders(config, extra = {}) {
   return {
-    Authorization: `Bearer ${config.relayToken}`,
+    Authorization: `Bearer ${config.accounts[0].relayToken}`,
     ...extra,
   };
 }

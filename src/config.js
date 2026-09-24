@@ -198,7 +198,6 @@ export function loadConfig(env = process.env) {
   return Object.freeze({
     profile,
     accounts,
-    ...(profile === "legacy" ? { appId, appSecret, relayToken } : {}),
     host,
     port: boundedInteger(env, "PORT", 18_794, 1_024, 65_535),
     dbPath: dbPathValue === ":memory:" ? dbPathValue : path.resolve(dbPathValue),

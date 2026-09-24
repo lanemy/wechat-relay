@@ -86,7 +86,7 @@ function errorPayload(error) {
   };
 }
 
-export function createRequestHandler({ config, store, wechat, logger }) {
+export function createRequestHandler({ config, store, clients, logger }) {
   const authenticate = createAuthenticator(config.accounts);
   const rateLimiter = new FixedWindowRateLimiter(
     config.rateLimitWindowMs,
@@ -114,8 +114,6 @@ export function createRequestHandler({ config, store, wechat, logger }) {
     const requestId = randomUUID();
     const startedAt = Date.now();
     let routeId = "unresolved";
-    // Read by the request.complete log record in the next task; stays "unresolved"
-    // whenever authentication does not complete.
     let accountId = "unresolved";
     let account = null;
     let bodyBytes = 0;
@@ -146,7 +144,7 @@ export function createRequestHandler({ config, store, wechat, logger }) {
 
       try {
         account = authenticate(req);
-        accountId = account.id; // eslint-disable-line no-unused-vars -- consumed by the request.complete log record in the next task
+        accountId = account.id;
       } catch (error) {
         enforceRateLimit("preauth", "preauth");
         throw error;
@@ -169,7 +167,14 @@ export function createRequestHandler({ config, store, wechat, logger }) {
               "Idempotency metadata capacity is exhausted.",
             );
           }
-          await wechat.ensureReady();
+          for (const [id, client] of clients) {
+            try {
+              await client.ensureReady();
+            } catch (error) {
+              if (config.profile === "legacy") throw error;
+              throw new HttpError(503, "account_not_ready", `Account '${id}' is not ready.`);
+            }
+          }
         } finally {
           release();
         }
@@ -204,7 +209,7 @@ export function createRequestHandler({ config, store, wechat, logger }) {
             reservationStarted = true;
           }
           upstreamStarted = true;
-          const upstream = await wechat.forward(route, body, contentType);
+          const upstream = await clients.get(account.id).forward(route, body, contentType);
           if (reservationStarted) {
             store.mark(idempotencyKey, route.id, hash, "completed");
             reservationFinalized = true;
@@ -246,6 +251,7 @@ export function createRequestHandler({ config, store, wechat, logger }) {
         requestId,
         method: req.method,
         route: routeId,
+        account: accountId,
         status: responseStatus,
         durationMs: Date.now() - startedAt,
         bodyBytes,
@@ -262,8 +268,11 @@ export function createRelayService({ config, fetchImpl = fetch, logStream = proc
     maxRecords: config.idempotencyMaxRecords,
     failedSafeRetentionMs: config.idempotencyFailedSafeRetentionMs,
   });
-  const wechat = new WechatClient(config, fetchImpl);
-  const handler = createRequestHandler({ config, store, wechat, logger });
+  const clients = new Map(config.accounts.map((account) => [
+    account.id,
+    new WechatClient({ ...config, appId: account.appId, appSecret: account.appSecret }, fetchImpl),
+  ]));
+  const handler = createRequestHandler({ config, store, clients, logger });
   const server = http.createServer(
     {
       maxHeaderSize: 16 * 1024,
@@ -284,7 +293,7 @@ export function createRelayService({ config, fetchImpl = fetch, logStream = proc
   return {
     server,
     store,
-    wechat,
+    clients,
     logger,
     async listen() {
       await new Promise((resolve, reject) => {
@@ -298,7 +307,7 @@ export function createRelayService({ config, fetchImpl = fetch, logStream = proc
       return server.address();
     },
     async close() {
-      wechat.clearSecrets();
+      for (const client of clients.values()) client.clearSecrets();
       if (server.listening) {
         await new Promise((resolve, reject) => {
           server.close((error) => (error ? reject(error) : resolve()));
