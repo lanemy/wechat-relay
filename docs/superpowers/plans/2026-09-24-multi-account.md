@@ -525,7 +525,27 @@ All digests are SHA-256 (32 bytes), so `timingSafeEqual` never sees mismatched l
 
 In `createRequestHandler`: `const authenticate = createAuthenticator(config.relayToken);` → `createAuthenticator(config.accounts);`. In the handler body add `let accountId = "unresolved";` next to `let routeId = "unresolved";` and `let account = null;` beside it (Task 3 needs `account.id` outside the auth try-block). Inside the authenticate try, change `authenticate(req);` to `account = authenticate(req); accountId = account.id;`. Do **not** use `account` further in this task.
 
-- [ ] **Step 5: Verify and commit**
+- [ ] **Step 5: Update `test/helpers.js` so server tests keep passing**
+
+`createRequestHandler` now reads `config.accounts`; `testConfig()` must provide it. Add the two fields while keeping the legacy top-level trio (removed only in Task 3):
+
+```js
+export function testConfig(overrides = {}) {
+  const appId = "test-app-id";
+  const appSecret = "test-app-secret";
+  const relayToken = "r".repeat(48);
+  return {
+    profile: "legacy",
+    accounts: [Object.freeze({ id: "default", appId, appSecret, relayToken })],
+    appId,
+    appSecret,
+    relayToken,
+    host: "127.0.0.1",
+```
+
+(The rest of the object stays as-is.)
+
+- [ ] **Step 6: Verify and commit**
 
 ```bash
 git add -A && npm run snapshot:write && npm run check
@@ -807,11 +827,14 @@ test("v2 digests namespace the same key per account", () => {
   const bodyHash = createHash("sha256").update("body").digest("hex");
   assert.equal(store.begin("main", "draft-key-0001", "draft.add", bodyHash).action, "proceed");
   assert.equal(store.begin("tech", "draft-key-0001", "draft.add", bodyHash).action, "proceed");
-  assert.equal(store.get("main", "draft-key-0001").idempotency_key_sha256 !== store.get("tech", "draft-key-0001").idempotency_key_sha256, true);
+  assert.notEqual(
+    store.get("main", "draft-key-0001").idempotency_key_sha256,
+    store.get("tech", "draft-key-0001").idempotency_key_sha256,
+  );
   assert.equal(store.mark("main", "draft-key-0001", "draft.add", bodyHash, "completed"), undefined);
-  assert.throws(() => store.mark("tech", "draft-key-0001", "draft.add", bodyHash, "completed"), {
-    message: "Idempotency stage transition lost its reservation.",
-  });
+  // Marking main does not touch tech's independent reservation.
+  assert.equal(store.get("main", "draft-key-0001").stage, "completed");
+  assert.equal(store.get("tech", "draft-key-0001").stage, "forwarding");
 });
 ```
 
