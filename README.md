@@ -14,7 +14,7 @@ The relay creates or reads drafts only through the four documented compatibility
 
 ## Security model
 
-- The Node process refuses to start unless `WECHAT_APP_ID`, `WECHAT_APP_SECRET`, and `RELAY_TOKEN` are all present.
+- The Node process refuses to start unless `WECHAT_APP_ID`, `WECHAT_APP_SECRET`, and `RELAY_TOKEN` are all present — or, in multi-account mode, an `ACCOUNTS_FILE` is configured instead (see below).
 - `RELAY_TOKEN` must encode at least 32 cryptographically random bytes (at least 43 base64/base64url characters or 64 hex characters). Do not invent a memorable password.
 - The process binds only to `127.0.0.1` or `::1`. Tailscale Serve or Caddy is the network boundary.
 - `/v1/health` is public and returns only `{"ok":true}`. `/v1/ready` is authenticated and checks SQLite plus WeChat credential/IP readiness.
@@ -26,6 +26,19 @@ The relay creates or reads drafts only through the four documented compatibility
 - The statistics routes are read-only: they reject `Idempotency-Key`, never touch SQLite, and fail closed on date windows that are not calendar-valid, exceed the route's span limit, or name a Beijing day whose data is not final.
 
 Read [SECURITY.md](SECURITY.md), [THREAT_MODEL.md](THREAT_MODEL.md), and [docs/PROTOCOL.md](docs/PROTOCOL.md) before deployment.
+
+## Multi-account mode
+
+The relay supports two mutually exclusive configuration profiles:
+
+1. **Single account (default):** set `WECHAT_APP_ID`, `WECHAT_APP_SECRET`, and `RELAY_TOKEN`.
+2. **Multi-account:** set `ACCOUNTS_FILE` to a JSON file listing 1–16 accounts, each with exactly `id`, `appId`, `appSecret`, and `relayToken`. Combining `ACCOUNTS_FILE` with any of the three single-account variables is rejected at startup.
+
+See [accounts.example.json](accounts.example.json) for the file shape. Account ids match `^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$`; ids, app ids, and tokens must be unique; every relay token must encode at least 32 random bytes. The file must be mode 600 (no group/world bits) and at most 64 KiB, and it is gitignored.
+
+The presented bearer token both authenticates the request and selects the WeChat account it applies to; a token can never reach another account. Routes and paths are identical in both modes, and `/v1/ready` sweeps every account. Changes to the accounts file apply only after a restart — there is no hot reload.
+
+When moving an existing deployment from single-account to multi-account, prefer a fresh `DB_PATH`: idempotency key digests are namespaced per profile, so legacy rows never match the accounts-profile domain and protected rows are never evicted (see [docs/PROTOCOL.md](docs/PROTOCOL.md)).
 
 ## Runtime requirements
 

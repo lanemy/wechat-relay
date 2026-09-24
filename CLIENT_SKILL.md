@@ -15,6 +15,7 @@ WECHAT_RELAY_TOKEN  # ≥32 随机字节（Base64 ≥43 字符或 Hex ≥64 字�
 
 - 除 `/v1/health` 外所有接口带 `Authorization: Bearer $WECHAT_RELAY_TOKEN`
 - **只发一种**认证头；同时发 Bearer 和 X-Relay-Token 会被拒绝
+- **多账号模式**：relay 可能配置了多个公众号（`ACCOUNTS_FILE`）。此时 `WECHAT_RELAY_TOKEN` 必须用**目标账号自己的 relay token**——token 同时完成认证和账号选择，用哪个 token 就作用于哪个公众号，无法跨账号访问。URL 与请求形状完全不变
 
 ## 一、草稿链路（4 条写/读接口）
 

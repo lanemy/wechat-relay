@@ -21,6 +21,7 @@ Include the affected revision, route, preconditions, impact, and a minimal redac
 - Only the twelve exact routes in [docs/PROTOCOL.md](docs/PROTOCOL.md) exist; ten proxy to fixed WeChat API paths — four draft operations and six read-only statistics lookups whose date windows fail closed before forwarding.
 - The client cannot select a host, scheme, arbitrary path, redirect target, or arbitrary query parameter.
 - Authentication uses a constant-size digest and `crypto.timingSafeEqual`.
+- The optional accounts file (`ACCOUNTS_FILE`) is an operator-supplied credential store: mode 600 (no group/world permission bits) is enforced at startup, the file is capped at 64 KiB and 1–16 accounts, the filename is gitignored, and its contents are never logged; at request time only per-account SHA-256 token digests are compared.
 - Body, header, response, total upstream-operation time (including token refresh/retry), rate, and concurrency bounds fail closed; rejected unread bodies close their connection. Anonymous abuse and authenticated operations use separate rate buckets so an outsider cannot consume the trusted client's quota.
 - Access tokens never leave process memory.
 - SQLite stores only a domain-separated digest of the idempotency key and never stores the caller's raw key, request/response bodies, article text, images, titles, access tokens, app credentials, or media identifiers.

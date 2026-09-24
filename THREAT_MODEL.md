@@ -4,6 +4,8 @@
 
 This repository runs one loopback-only Node.js service that authenticates a trusted client and forwards four fixed draft-related operations plus six fixed read-only article-statistics operations to `https://api.weixin.qq.com`. Its assets are the Official Account AppID/AppSecret, relay bearer token, in-memory WeChat access token, unpublished article/media content and published-article statistics in transit, fixed-IP allowlist privilege, and idempotency decisions that prevent duplicate drafts.
 
+**Accounts file on disk.** Multi-account deployments replace the three environment secrets with an operator-supplied accounts file holding plaintext AppID/AppSecret/relay-token values for 1–16 accounts. Mitigations: startup rejects files with group/world permission bits or a size above 64 KiB, ignore rules keep it out of the repository, logging carries only the non-secret account id, and edits apply only after a restart (no hot reload).
+
 Primary runtime code is under `src/`. The systemd and reverse-proxy examples under `deploy/` define the production isolation boundary. Tests, documentation, and the local secret scanner are developer/operator surfaces and are not network services.
 
 ## Threat Model, Trust Boundaries, and Assumptions
@@ -14,12 +16,12 @@ Primary runtime code is under `src/`. The systemd and reverse-proxy examples und
 2. **Network edge to Node process:** the edge connects to `127.0.0.1:18794`. `src/config.js` rejects non-loopback binding and `src/server.js` rejects non-loopback peers.
 3. **Node process to WeChat:** `src/wechat-client.js` selects a fixed HTTPS origin and ten fixed upstream paths. Request bodies are attacker-controlled after authentication, but the upstream host/path is not.
 4. **Node process to local state:** `src/idempotency-store.js` writes only a domain-separated idempotency-key digest plus route/body-hash/stage metadata to a mode-0600 SQLite database. Raw caller keys, credentials, bodies, images, responses, and media identifiers never cross this boundary.
-5. **Operator to runtime configuration:** the root-only systemd environment file supplies three required secrets. Repository files, logs, service status, and public health output must not reveal them.
+5. **Operator to runtime configuration:** the root-only systemd environment file supplies the required secrets — the three single-account variables or, in multi-account deployments, an `ACCOUNTS_FILE` path. Repository files, logs, service status, and public health output must not reveal them.
 
 ### Inputs
 
 - **Attacker-controlled:** unauthenticated HTTP requests at the edge; path, method, query, headers, body bytes, connection pacing, and replay timing; authenticated malicious payloads if a relay token is stolen.
-- **Operator-controlled:** AppID, AppSecret, relay token, fixed IPv4, WeChat allowlist, DNS, Caddy/Tailscale policy, firewall, deployment revision, body/rate/time limits, and SQLite file handling.
+- **Operator-controlled:** AppID, AppSecret, relay token, accounts file, fixed IPv4, WeChat allowlist, DNS, Caddy/Tailscale policy, firewall, deployment revision, body/rate/time limits, and SQLite file handling.
 - **Developer-controlled:** dependency versions, route mapping, validation, logging allowlist, systemd hardening, tests, and release contents.
 
 ### Assumptions
@@ -37,7 +39,7 @@ An attacker may send oversized, slow, compressed, malformed, or high-rate reques
 
 ### Authentication and secret disclosure
 
-An attacker may guess a bearer token, submit ambiguous authentication headers, or try to make errors/logs echo secrets. `src/auth.js` accepts exactly one supported header and compares fixed-size SHA-256 digests with `timingSafeEqual`. `src/logger.js` serializes only allowlisted metadata. Public errors never use upstream URLs or internal exception messages. Startup rejects missing credentials and short tokens.
+An attacker may guess a bearer token, submit ambiguous authentication headers, or try to make errors/logs echo secrets. `src/auth.js` accepts exactly one supported header and compares fixed-size SHA-256 digests with `timingSafeEqual`; in multi-account mode the presented token both authenticates the request and selects the account it applies to, so a token can never reach another account. `src/logger.js` serializes only allowlisted metadata. Public errors never use upstream URLs or internal exception messages. Startup rejects missing credentials and short tokens.
 
 ### SSRF and confused-deputy abuse
 
@@ -66,4 +68,4 @@ No generic path forwarding is implemented: the relay recognizes only the ten doc
 
 Repository: github.com/mcncarl/wechat-relay
 Snapshot digest covers every file tracked by git (`git ls-files`, which excludes `.git/`, `node_modules/`, and ignored files), ordered by path, with the following version line normalized to `Version: snapshot-pending`. For each file, `sha256(path + NUL + content)` is computed; the version digest is the SHA-256 of those per-file digests concatenated. Regenerate after any change with `node scripts/threat-model-snapshot.mjs --write`.
-Version: uncommitted-snapshot-sha256:f8ef788cf5f2845eb34530da4026cd97ef7dae5fb851f77e649906b229cf76d7
+Version: uncommitted-snapshot-sha256:efdf5cfdc5fd14f60a078311c19c01d599bf98abe103205b88980b52f3359212

@@ -9,6 +9,10 @@
   - `Authorization: Bearer <RELAY_TOKEN>` (preferred)
   - `X-Relay-Token: <RELAY_TOKEN>` (legacy compatibility)
 - Supplying both authentication headers is rejected.
+- Multi-account deployments configure an accounts file (`ACCOUNTS_FILE`) instead of
+  `WECHAT_APP_ID`/`WECHAT_APP_SECRET`/`RELAY_TOKEN`. The presented token both authenticates
+  the request and selects the WeChat account it applies to; a token can never reach another
+  account. Routes and paths are identical in both modes.
 
 ## Health and readiness
 
@@ -27,6 +31,8 @@ Authenticated readiness check. It verifies SQLite and obtains or reuses an in-me
 ```json
 {"ready":true}
 ```
+
+In multi-account mode the check sweeps every configured account. If any account cannot obtain or reuse its access token, the response is `503 account_not_ready` naming that account's id. The single-account failure path is unchanged (`502`).
 
 ## Compatible WeChat routes
 
@@ -69,6 +75,8 @@ Use an opaque UUID or content digest. Never put a title, article text, filename,
 - A timeout or transport failure after the operation may have reached WeChat moves it to `outcome_unknown`.
 - Reuse with another body or route is `409 idempotency_conflict`.
 - Reuse after `completed`, `forwarding`, or `outcome_unknown` is blocked with `409 idempotency_replay_blocked`.
+
+Key digests are namespaced per configuration profile. Single-account deployments hash keys under the `v1` domain, byte-identical to earlier releases. Accounts-file deployments hash under a `v2` domain that includes the account id, so the same `Idempotency-Key` is independent across accounts and never matches a `v1` row. When adopting the accounts profile, prefer a fresh `DB_PATH`: legacy `v1` rows never match `v2` digests and protected rows are never evicted.
 
 The relay intentionally does not persist the WeChat response or media identifier. Therefore a blocked replay does not return the prior result: reconcile the existing draft before deciding on another key. This fails closed instead of silently creating duplicates.
 

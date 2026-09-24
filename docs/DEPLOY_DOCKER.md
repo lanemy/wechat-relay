@@ -34,7 +34,7 @@ cp .env.example .env
 openssl rand -base64 48
 ```
 
-编辑 `.env`,填入三项必填值:
+编辑 `.env`,填入三项必填值(只服务单个公众号;多公众号改用账号文件,见第 5 节):
 
 ```dotenv
 WECHAT_APP_ID=<公众号 AppID>
@@ -95,7 +95,75 @@ EOF
 `/v1/ready` 会校验 SQLite 与微信凭据/IP 白名单就绪状态,失败时看结构化日志,
 不要放宽日志去打印头部、请求体或密钥。
 
-## 5. 配置 nginx-proxy-manager
+## 5. 多公众号模式(可选)
+
+单个 relay 实例可以服务多个公众号(1–16 个),用账号文件替代三个单账号变量:
+
+1. **创建 `accounts.json`**(模板见仓库根目录的
+   [accounts.example.json](../accounts.example.json)):
+
+   ```json
+   [
+     {
+       "id": "main",
+       "appId": "<公众号 A 的 AppID>",
+       "appSecret": "<公众号 A 的 AppSecret>",
+       "relayToken": "<openssl rand -base64 32 | tr '+/' '-_' 生成的独立随机值>"
+     },
+     {
+       "id": "second",
+       "appId": "<公众号 B 的 AppID>",
+       "appSecret": "<公众号 B 的 AppSecret>",
+       "relayToken": "<另一个独立随机值>"
+     }
+   ]
+   ```
+
+   规则:`id` 为 1–32 位小写字母/数字/连字符,首尾须为字母或数字;id、appId、
+   relayToken 互不重复;每个 token 至少 32 字节熵(Base64 ≥43 字符);文件 ≤64 KiB。
+
+2. **属主与权限**:容器内以非 root `node` 用户(UID/GID 1000)运行,
+   `accounts.json` 必须归该用户所有且权限为 600 —— 带组/其他权限位会直接拒绝启动:
+
+   ```bash
+   chown 1000:1000 ./accounts.json
+   chmod 600 ./accounts.json
+   ```
+
+3. **挂载并启用**:在 docker-compose.yaml 中取消 accounts 只读挂载的注释,并在
+   `environment:` 里设置 `ACCOUNTS_FILE`;同时**从 `.env` 删除
+   `WECHAT_APP_ID` / `WECHAT_APP_SECRET` / `RELAY_TOKEN` 三项**(与 ACCOUNTS_FILE
+   混用会拒绝启动):
+
+   ```yaml
+   environment:
+     ACCOUNTS_FILE: /etc/wechat-relay/accounts.json
+   volumes:
+     - ./accounts.json:/etc/wechat-relay/accounts.json:ro
+   ```
+
+4. **重启并验证**(accounts 文件的任何改动都需重启生效,无热加载):
+
+   ```bash
+   docker compose up -d
+   # 先把 RELAY_TOKEN export 为某个账号的 relayToken(令牌走 stdin,不进 shell 历史):
+   curl --fail --silent --show-error --config - <<EOF
+   url = "http://127.0.0.1:18794/v1/ready"
+   header = "Authorization: Bearer ${RELAY_TOKEN}"
+   EOF
+   ```
+
+   多账号模式下 `/v1/ready` 会逐一检查**每个**账号,任一账号未就绪返回
+   `503 account_not_ready` 并指明其账号 id。
+
+注意:
+
+- 请求带哪个账号的 token,就作用于哪个公众号;token 无法跨账号访问,
+  路由与请求形状和单账号模式完全一致。
+- 从单账号迁移到多账号时建议改用全新的 `DB_PATH`:幂等摘要域不同,旧 v1 记录
+  永远匹配不上且受保护不清除(详见 [PROTOCOL.md](PROTOCOL.md)「Idempotency」)。
+
+## 6. 配置 nginx-proxy-manager
 
 在 NPM 中新建 Proxy Host:
 
@@ -115,7 +183,7 @@ EOF
 防火墙:只暴露 SSH(按你的策略)与 NPM 的 80/443;18794 仅 loopback 可达
 (`ss -ltnp` 确认)。
 
-## 6. 更新与回滚
+## 7. 更新与回滚
 
 ```bash
 git fetch --all --prune
@@ -127,7 +195,7 @@ docker compose up -d --build
 升级前备份它即可;不要把数据库拷进 Git,也不要为了重试而删除/改写幂等记录,
 除非已人工对账过对应的微信草稿状态。
 
-## 7. 卸载
+## 8. 卸载
 
 ```bash
 docker compose down
