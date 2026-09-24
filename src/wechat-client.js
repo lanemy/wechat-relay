@@ -11,7 +11,12 @@ function timeoutError(outcomeUnknown) {
 
 async function settleBefore(promise, deadline, outcomeUnknown) {
   const remaining = deadline - Date.now();
-  if (remaining <= 0) throw timeoutError(outcomeUnknown);
+  if (remaining <= 0) {
+    // The caller never awaits this promise; attach a no-op handler so its
+    // concurrent rejection cannot surface as an unhandled rejection.
+    promise.catch(() => undefined);
+    throw timeoutError(outcomeUnknown);
+  }
   let timer;
   try {
     return await Promise.race([

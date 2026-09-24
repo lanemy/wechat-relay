@@ -119,3 +119,21 @@ test("oversized upstream JSON is rejected without exposing its content", async (
   ));
   await assert.rejects(client.ensureReady(), { code: "upstream_response_too_large" });
 });
+
+test("early deadline exit does not orphan the in-flight refresh promise", async () => {
+  const client = new WechatClient(clientConfig(), async () =>
+    jsonResponse({ access_token: "memory-only-token", expires_in: 7_200 }));
+  const observed = [];
+  const onUnhandled = (reason) => observed.push(String(reason?.code ?? reason));
+  process.on("unhandledRejection", onUnhandled);
+  try {
+    await assert.rejects(
+      () => client.getAccessToken(false, Date.now() - 1),
+      { code: "upstream_timeout" },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    assert.deepEqual(observed, []);
+  } finally {
+    process.off("unhandledRejection", onUnhandled);
+  }
+});
