@@ -87,7 +87,7 @@ function errorPayload(error) {
 }
 
 export function createRequestHandler({ config, store, wechat, logger }) {
-  const authenticate = createAuthenticator(config.relayToken);
+  const authenticate = createAuthenticator(config.accounts);
   const rateLimiter = new FixedWindowRateLimiter(
     config.rateLimitWindowMs,
     {
@@ -114,6 +114,10 @@ export function createRequestHandler({ config, store, wechat, logger }) {
     const requestId = randomUUID();
     const startedAt = Date.now();
     let routeId = "unresolved";
+    // Read by the request.complete log record in the next task; stays "unresolved"
+    // whenever authentication does not complete.
+    let accountId = "unresolved";
+    let account = null;
     let bodyBytes = 0;
     let idempotency = false;
     let responseStatus = 500;
@@ -141,7 +145,8 @@ export function createRequestHandler({ config, store, wechat, logger }) {
       }
 
       try {
-        authenticate(req);
+        account = authenticate(req);
+        accountId = account.id; // eslint-disable-line no-unused-vars -- consumed by the request.complete log record in the next task
       } catch (error) {
         enforceRateLimit("preauth", "preauth");
         throw error;

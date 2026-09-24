@@ -137,9 +137,9 @@ test("status endpoints reject declared or streamed request bodies", () => {
 
 test("authentication accepts exactly one correct credential header", () => {
   const token = "a".repeat(48);
-  const authenticate = createAuthenticator(token);
-  assert.doesNotThrow(() => authenticate({ headers: { authorization: `Bearer ${token}` } }));
-  assert.doesNotThrow(() => authenticate({ headers: { "x-relay-token": token } }));
+  const authenticate = createAuthenticator([{ id: "default", relayToken: token }]);
+  assert.deepEqual(authenticate({ headers: { authorization: `Bearer ${token}` } }), { id: "default" });
+  assert.deepEqual(authenticate({ headers: { "x-relay-token": token } }), { id: "default" });
   assert.throws(() => authenticate({ headers: { authorization: "Bearer wrong" } }), { statusCode: 401 });
   assert.throws(
     () => authenticate({
@@ -162,5 +162,25 @@ test("authentication accepts exactly one correct credential header", () => {
       rawHeaders: ["Authorization", `Bearer ${token}`, "Authorization", "Bearer other"],
     }),
     { statusCode: 400, code: "ambiguous_authentication" },
+  );
+});
+
+test("authentication resolves the account matching the presented token", () => {
+  const accounts = [
+    { id: "main", relayToken: "a".repeat(48) },
+    { id: "tech", relayToken: "b".repeat(48) },
+  ];
+  const authenticate = createAuthenticator(accounts);
+  assert.deepEqual(
+    authenticate({ headers: { "x-relay-token": accounts[1].relayToken } }),
+    { id: "tech" },
+  );
+  assert.deepEqual(
+    authenticate({ headers: { authorization: `Bearer ${accounts[0].relayToken}` } }),
+    { id: "main" },
+  );
+  assert.throws(
+    () => authenticate({ headers: { authorization: `Bearer ${"c".repeat(48)}` } }),
+    { statusCode: 401, code: "unauthorized" },
   );
 });

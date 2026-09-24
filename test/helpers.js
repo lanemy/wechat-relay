@@ -1,10 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 export function testConfig(overrides = {}) {
+  const appId = "test-app-id";
+  const appSecret = "test-app-secret";
+  const relayToken = "r".repeat(48);
   return {
-    appId: "test-app-id",
-    appSecret: "test-app-secret",
-    relayToken: "r".repeat(48),
+    profile: "legacy",
+    accounts: [Object.freeze({ id: "default", appId, appSecret, relayToken })],
+    appId,
+    appSecret,
+    relayToken,
     host: "127.0.0.1",
     port: 0,
     dbPath: ":memory:",
