@@ -39,7 +39,7 @@ services:
       NODE_OPTIONS: --max-old-space-size=192
       # 多公众号模式(可选; 设置后移除 .env 中的三个单账号变量
       # WECHAT_APP_ID / WECHAT_APP_SECRET / RELAY_TOKEN):
-      # - ACCOUNTS_FILE=/etc/wechat-relay/accounts.json
+      #   ACCOUNTS_FILE: /etc/wechat-relay/accounts.json
     volumes:
       # 宿主机数据目录(SQLite 落盘处),可在 .env 中用 DATA_DIR 覆盖,
       # 例: DATA_DIR=/srv/wechat-relay/data (绝对路径或相对 compose 文件的路径)。
