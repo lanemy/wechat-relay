@@ -224,7 +224,7 @@ import fs from "node:fs";
 Add after the `LOOPBACK_HOSTS` / `SUPPORTED_NODE_MAJORS` constants:
 
 ```js
-const ACCOUNT_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,31}$/u;
+const ACCOUNT_ID_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/u;
 const MAX_ACCOUNTS = 16;
 const MAX_ACCOUNTS_FILE_BYTES = 65_536;
 const ACCOUNT_KEYS = ["appSecret", "appId", "id", "relayToken"];

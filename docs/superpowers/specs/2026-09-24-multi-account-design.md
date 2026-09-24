@@ -58,7 +58,7 @@ Env: `ACCOUNTS_FILE=<path>` (relative paths resolve against cwd, like `DB_PATH`)
 | 5 | Parses as JSON | `invalid_accounts_json` |
 | 6 | Is an array of 1–16 plain objects | `invalid_accounts_shape` / `too_many_accounts` |
 | 7 | Each object has exactly the keys `id`, `appId`, `appSecret`, `relayToken`, all non-empty strings ≤ 256 chars | `invalid_accounts_shape` |
-| 8 | `id` matches `^[a-z0-9][a-z0-9-]{0,31}$` | `invalid_account_id` |
+| 8 | `id` matches `^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$` (no leading/trailing hyphen) | `invalid_account_id` |
 | 9 | Each `relayToken` passes the existing `validateRelayToken` rules (charset + ≥32-byte entropy encoding) | `invalid_account_relay_token` / `invalid_account_relay_token_length` |
 | 10 | `id` values unique · `appId` values unique · `relayToken` values unique | `duplicate_account_id` / `duplicate_account_app_id` / `duplicate_account_relay_token` |
 
