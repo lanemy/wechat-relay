@@ -48,11 +48,11 @@ import test from "node:test";
 import { loadConfig } from "../src/config.js";
 
 function tokenA() {
-  return "a".repeat(48);
+  return "g".repeat(48);
 }
 
 function tokenB() {
-  return "b".repeat(48);
+  return "h".repeat(48);
 }
 
 function tmpDir() {
@@ -227,7 +227,7 @@ Add after the `LOOPBACK_HOSTS` / `SUPPORTED_NODE_MAJORS` constants:
 const ACCOUNT_ID_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/u;
 const MAX_ACCOUNTS = 16;
 const MAX_ACCOUNTS_FILE_BYTES = 65_536;
-const ACCOUNT_KEYS = ["appSecret", "appId", "id", "relayToken"];
+const ACCOUNT_KEYS = ["appId", "appSecret", "id", "relayToken"];
 ```
 
 Add a validator that reuses `validateRelayToken`:
