@@ -46,12 +46,12 @@ test("relay token must encode at least 32 random bytes", () => {
     () => loadConfig({ ...validEnv(), RELAY_TOKEN: "z".repeat(42) }),
     { code: "invalid_RELAY_TOKEN_length" },
   );
-  assert.equal(loadConfig({ ...validEnv(), RELAY_TOKEN: "z".repeat(43) }).relayToken.length, 43);
+  assert.equal(loadConfig({ ...validEnv(), RELAY_TOKEN: "z".repeat(43) }).accounts[0].relayToken.length, 43);
   assert.throws(
     () => loadConfig({ ...validEnv(), RELAY_TOKEN: "a".repeat(63) }),
     { code: "invalid_RELAY_TOKEN_length" },
   );
-  assert.equal(loadConfig({ ...validEnv(), RELAY_TOKEN: "a".repeat(64) }).relayToken.length, 64);
+  assert.equal(loadConfig({ ...validEnv(), RELAY_TOKEN: "a".repeat(64) }).accounts[0].relayToken.length, 64);
   assert.throws(
     () => loadConfig({ ...validEnv(), RELAY_TOKEN: "密".repeat(32) }),
     { code: "invalid_RELAY_TOKEN" },
