@@ -66,4 +66,4 @@ No generic path forwarding is implemented: the relay recognizes only the ten doc
 
 Repository: github.com/mcncarl/wechat-relay
 Snapshot digest covers every file tracked by git (`git ls-files`, which excludes `.git/`, `node_modules/`, and ignored files), ordered by path, with the following version line normalized to `Version: snapshot-pending`. For each file, `sha256(path + NUL + content)` is computed; the version digest is the SHA-256 of those per-file digests concatenated. Regenerate after any change with `node scripts/threat-model-snapshot.mjs --write`.
-Version: uncommitted-snapshot-sha256:1ea61c9d6308ee693484363cad59e9c2b4c4dd8e66e568f334b0dd0ba20355be
+Version: uncommitted-snapshot-sha256:f8ef788cf5f2845eb34530da4026cd97ef7dae5fb851f77e649906b229cf76d7

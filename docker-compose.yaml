@@ -37,11 +37,15 @@ services:
       DB_PATH: /app/data/idempotency.sqlite3
       # 1c2G 服务器限制 Node 堆,防止极端情况下内存膨胀
       NODE_OPTIONS: --max-old-space-size=192
+      # 多公众号模式(可选; 设置后移除上面三个单账号变量):
+      # - ACCOUNTS_FILE=/etc/wechat-relay/accounts.json
     volumes:
       # 宿主机数据目录(SQLite 落盘处),可在 .env 中用 DATA_DIR 覆盖,
       # 例: DATA_DIR=/srv/wechat-relay/data (绝对路径或相对 compose 文件的路径)。
       # 容器内路径 /app/data 固定不动,与 DB_PATH 对应,不要改。
       - ${DATA_DIR:-./data}:/app/data
+      # 多公众号模式(可选): 挂载 accounts.json,配合 environment 中 ACCOUNTS_FILE 使用。
+      # - ./accounts.json:/etc/wechat-relay/accounts.json:ro
     mem_limit: 256m
     logging:
       driver: json-file

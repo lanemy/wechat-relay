@@ -1,0 +1,8 @@
+[
+  {
+    "id": "main",
+    "appId": "replace-with-real-app-id",
+    "appSecret": "replace-with-real-app-secret",
+    "relayToken": "<generate-43-plus-char-base64url>"
+  }
+]

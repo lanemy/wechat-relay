@@ -30,7 +30,7 @@ test("environment example contains keys but no values", () => {
     assert.match(line, /^[A-Z0-9_]+=$/u);
   }
   const ignored = text(".gitignore");
-  for (const sensitive of [".env", ".npmrc", "*.pem", "*.key", "*.sqlite3", "*.log"]) {
+  for (const sensitive of [".env", ".npmrc", "*.pem", "*.key", "*.sqlite3", "*.log", "accounts.json"]) {
     assert.ok(ignored.includes(sensitive), sensitive);
   }
 });
