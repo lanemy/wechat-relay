@@ -16,7 +16,7 @@ The relay creates or reads drafts only through the four documented compatibility
 
 - The Node process refuses to start unless `WECHAT_APP_ID`, `WECHAT_APP_SECRET`, and `RELAY_TOKEN` are all present — or, in multi-account mode, an `ACCOUNTS_FILE` is configured instead (see below).
 - `RELAY_TOKEN` must encode at least 32 cryptographically random bytes (at least 43 base64/base64url characters or 64 hex characters). Do not invent a memorable password.
-- The process binds only to `127.0.0.1` or `::1`. Tailscale Serve or Caddy is the network boundary.
+- The process binds only to `127.0.0.1` or `::1`. A reverse proxy (Tailscale Serve, Caddy, or the operator's nginx-proxy-manager on the Docker route) is the network boundary.
 - `/v1/health` is public and returns only `{"ok":true}`. `/v1/ready` is authenticated and checks SQLite plus WeChat credential/IP readiness.
 - Request paths, methods, query parameters, content types, body sizes, body time, total upstream-operation time (including token refresh/retry), response size, rate, total connections, and concurrent admitted requests are bounded.
 - WeChat `access_token` values live only in process memory.
@@ -52,17 +52,11 @@ The recommended region is Hong Kong when it provides the appropriate stable IPv4
 
 ```bash
 npm ci
-npm test
-npm run lint
-npm run syntax
-npm run secret-scan
-```
-
-The service intentionally does not auto-load `.env`. Export variables explicitly or provide them through systemd. Start it with:
-
-```bash
+npm run check   # test + lint + syntax + secret-scan (the full CI gate)
 npm start
 ```
+
+The service intentionally does not auto-load `.env`. Export variables explicitly or provide them through systemd.
 
 The empty [.env.example](.env.example) is a key list, not a working configuration. Never commit a populated environment file.
 

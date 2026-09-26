@@ -142,10 +142,12 @@ EOF
      - ./accounts.json:/etc/wechat-relay/accounts.json:ro
    ```
 
-4. **重启并验证**(accounts 文件的任何改动都需重启生效,无热加载):
+4. **重启并验证**(accounts 文件的任何改动都需重启生效,无热加载)。
+   必须用 `--force-recreate`:vim/nano 保存会替换文件 inode,而单文件 bind mount
+   不随普通 restart 重新解析路径,容器会继续读旧文件、新账号 401:
 
    ```bash
-   docker compose up -d
+   docker compose up -d --force-recreate
    # 先把 RELAY_TOKEN export 为某个账号的 relayToken(令牌走 stdin,不进 shell 历史):
    curl --fail --silent --show-error --config - <<EOF
    url = "http://127.0.0.1:18794/v1/ready"
